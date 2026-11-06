@@ -1,0 +1,1 @@
+import express from 'express';const app=express();app.use(express.json());app.post('/topup',(req,res)=>{if(process.env.MOCK_GAME_FAIL==='true')return res.status(503).json({ok:false});res.json({ok:true,orderId:req.body.orderId,providerRef:`game-${req.body.orderId}`})});app.listen(4002,()=>console.log('mock-game on 4002'));

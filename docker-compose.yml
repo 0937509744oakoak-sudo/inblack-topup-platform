@@ -1,0 +1,60 @@
+services:
+  api:
+    build: .
+    command: ["node", "dist/app.js"]
+    environment: &appenv
+      DATABASE_URL: postgres://inblack:${POSTGRES_PASSWORD:-local-only-change-me}@postgres:5432/inblack
+      REDIS_URL: redis://redis:6379
+      MOCK_PAY_URL: http://mock-pay:4001
+      MOCK_GAME_URL: http://mock-game:4002
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-local-webhook-secret-change-me}
+      VAT_BPS: ${VAT_BPS:-700}
+    ports: ["3000:3000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      mock-pay: { condition: service_started }
+      mock-game: { condition: service_started }
+    deploy: { replicas: 2 }
+    restart: unless-stopped
+  worker:
+    build: .
+    command: ["node", "dist/worker.js"]
+    environment: *appenv
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      mock-game: { condition: service_started }
+    restart: unless-stopped
+  mock-pay:
+    build: .
+    command: ["node", "dist/services/mock-pay.js"]
+    environment: *appenv
+    ports: ["4001:4001"]
+    restart: unless-stopped
+  mock-game:
+    build: .
+    command: ["node", "dist/services/mock-game.js"]
+    environment: *appenv
+    restart: unless-stopped
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: inblack
+      POSTGRES_USER: inblack
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-only-change-me}
+    volumes: ["pgdata:/var/lib/postgresql/data", "./db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro"]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U inblack -d inblack"], interval: 5s, timeout: 3s, retries: 20 }
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redisdata:/data"]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 20 }
+    restart: unless-stopped
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["8025:8025"]
+volumes:
+  pgdata:
+  redisdata:
